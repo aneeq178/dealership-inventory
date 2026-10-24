@@ -1,0 +1,73 @@
+name: CI
+
+# Runs on every pull request and on every push to main.
+# Deployment (added later) will depend on these jobs, so a failing check blocks a release.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend · lint, types, tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dealer
+          POSTGRES_PASSWORD: dealer
+          POSTGRES_DB: dealership
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U dealer -d dealership"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      # Throwaway values for the CI database only. Real secrets live in GitHub Secrets.
+      DATABASE_URL: postgresql://dealer:dealer@localhost:5432/dealership
+      JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else-0123456789
+      PASSWORD_HASH_ITERATIONS: "1000"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy
+
+      - name: Migrate and seed (proves scripts work on an empty database)
+        run: |
+          python -m scripts.migrate
+          python -m scripts.seed
+
+      - name: Tests (pytest against real Postgres)
+        run: pytest -v --junitxml=junit-backend.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: backend/junit-backend.xml
