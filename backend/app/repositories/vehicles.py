@@ -1,6 +1,5 @@
 """SQL for vehicles. Every query is scoped by dealership_id in the WHERE clause."""
 
-from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 import asyncpg
@@ -31,10 +30,6 @@ async def get_for_dealership(
     )
 
 
-# Test seam: awaited between reading the current version and writing. Always None in the app.
-after_read_hook: Callable[[], Awaitable[None]] | None = None
-
-
 async def update_if_version_matches(
     conn: asyncpg.Connection,
     *,
@@ -46,31 +41,32 @@ async def update_if_version_matches(
     """Apply `changes` only if the stored version still equals `changes.version`.
 
     Returns the updated row, or None if nothing was updated (missing, other dealership, or
-    stale version — the caller distinguishes these).
+    stale version; the caller distinguishes these).
 
-    NOTE: this implementation reads the version and then writes unconditionally.
+    Atomic: the version check is part of the UPDATE's WHERE clause, so checking and writing
+    are one statement. There is no window between "read the version" and "write the row".
+    If two of these race, Postgres makes the second wait on the first one's row lock. When
+    the lock is released, the second re-evaluates its WHERE clause against the newly
+    committed row (version is now N+1), matches zero rows, and returns nothing -> 409.
     """
-    current = await conn.fetchrow(
-        "SELECT version FROM vehicles WHERE id = $1 AND dealership_id = $2",
-        vehicle_id,
-        dealership_id,
-    )
-    if current is None:
-        return None
-    if after_read_hook is not None:
-        await after_read_hook()
-    if current["version"] != changes.version:
-        return None
-    await conn.execute(
-        """UPDATE vehicles
-              SET make = $1, model = $2, year = $3, status = $4,
-                  version = version + 1, updated_at = now(), updated_by = $5
-            WHERE id = $6""",
+    return await conn.fetchrow(
+        """WITH updated AS (
+               UPDATE vehicles
+                  SET make = $1, model = $2, year = $3, status = $4,
+                      version = version + 1, updated_at = now(), updated_by = $5
+                WHERE id = $6 AND dealership_id = $7 AND version = $8
+            RETURNING *
+           )
+           SELECT up.id, up.stock_number, up.make, up.model, up.year, up.status, up.version,
+                  up.updated_at, u.name AS updated_by_name
+             FROM updated up
+             LEFT JOIN users u ON u.id = up.updated_by""",
         changes.make,
         changes.model,
         changes.year,
         changes.status,
         updated_by,
         vehicle_id,
+        dealership_id,
+        changes.version,
     )
-    return await get_for_dealership(conn, vehicle_id=vehicle_id, dealership_id=dealership_id)
