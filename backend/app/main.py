@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import auth, health, vehicles
 from app.core.config import get_settings
@@ -38,6 +39,10 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(vehicles.router)
+
+    if settings.static_dir:
+        # Mounted last so every /api route above takes precedence.
+        app.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="frontend")
     return app
 
 
