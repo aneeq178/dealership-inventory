@@ -6,12 +6,13 @@ Each user belongs to exactly one dealership and is either an **administrator** (
 either change being silently lost.
 
 **Stack:** Next.js 16 (static export) · FastAPI (Python 3.13) · PostgreSQL 16 · GitHub Actions ·
-Cloudflare Workers (deployment built, waiting on account setup, see [status](#status)).
+Cloudflare Workers (free plan).
 
 | | |
 |---|---|
 | Repository | https://github.com/aneeq178/dealership-inventory |
-| Deployed app | _Pending: Cloudflare and Neon accounts must be set up first. See [Deployment](#deployment-cloudflare)._ |
+| Deployed app | **https://dealerdesk.aneeq02025.workers.dev** |
+| Green deploy run | [CI/CD run 40104512958](https://github.com/aneeq178/dealership-inventory/actions/runs/40104512958): checks, deploy, health, smoke 15/15 |
 | Loom walkthrough | _To be recorded._ |
 | Lost-update demo, red run | [CI run 40089597027](https://github.com/aneeq178/dealership-inventory/actions/runs/40089597027) on `de5c4fc` |
 | Lost-update demo, green run | [CI run 40089805129](https://github.com/aneeq178/dealership-inventory/actions/runs/40089805129) on `6dc1a40` |
@@ -30,12 +31,12 @@ Honest summary of what is done and verified versus still open.
 | Loading, invalid credentials, expiry/invalidation, forbidden, API failure states (4.1) | Done, verified | E2E `access.spec.ts`, manual review |
 | Auth, role and dealership enforcement with direct API tests; rejected writes leave data unchanged (4.2) | Done, verified | `tests/test_auth.py`, `tests/test_access.py` |
 | CI runs tests and build on PRs (4.3) | Done, verified | Actions tab, PRs #1 to #3 |
-| Deploy to Cloudflare only after checks pass; secrets in GitHub (4.3) | Built; **not yet run** (needs accounts) | `deploy` job in `ci.yml`, [Deployment](#deployment-cloudflare) |
+| Deploy to Cloudflare only after checks pass; secrets in GitHub (4.3) | Done, verified | [Run 40104512958](https://github.com/aneeq178/dealership-inventory/actions/runs/40104512958); earlier runs show failed checks stopping deployment |
 | Atomic lost-update prevention + regression test that fails on the defect (4.4) | Done, verified | Red and green runs above, `tests/test_concurrency.py` |
 | Frontend explains conflict and asks to refresh (4.4) | Done, verified | E2E `conflict.spec.ts` |
 | Repeatable seed: 2 dealerships, 6 users, 8 vehicles, hashed passwords (5) | Done, verified | `scripts/seed.py`, `scripts/reset.py` |
 | Frontend E2E for login, inventory, allowed update (5) | Done, verified | 7 Playwright tests |
-| Smoke test against the deployed app (5) | Wired into the deploy job; verified locally only so far | `scripts/smoke.py`, 15/15 against localhost |
+| Smoke test against the deployed app (5) | Done, verified | 15/15 in the deploy job and from a laptop; `scripts/live_race.py` 5/5 |
 | Health endpoint without secrets (6.1) | Done, verified | `GET /api/health`, `tests/test_health.py` |
 
 ---
@@ -364,6 +365,42 @@ The Workers free plan allows **10 ms of CPU per request**. Waiting on the databa
 - Each stored hash records its own iteration count. Raising `PASSWORD_HASH_ITERATIONS` and
   rerunning with `reset_demo_data` rehashes the demo accounts. No code change is needed.
 
+### Live verification
+
+Deployed version `d0729b7` at https://dealerdesk.aneeq02025.workers.dev:
+
+```
+GET /api/health -> {"status":"ok","db":"ok","version":"d0729b7"}
+scripts/smoke.py      15/15 checks passed (in the deploy job and from a laptop)
+scripts/live_race.py  5/5 rounds: exactly one 200, one 409, winner stored
+```
+
+`scripts/live_race.py` races both Northside admins against the live site. Each round both
+read the same version, then a thread barrier releases two different edits at the same
+instant. The winner varied between rounds, so these were genuinely simultaneous; the
+database accepted exactly one each time. It restores the vehicle afterwards.
+
+```bash
+python backend/scripts/live_race.py https://dealerdesk.aneeq02025.workers.dev
+```
+
+**CPU budget in practice.** Across roughly 75 live API requests, including 9 logins at
+10,000 PBKDF2 iterations, none hit Cloudflare's CPU limit error (1102). The dashboard's
+exact per-request CPU figure was not captured.
+
+### First deployment: what failed and how the gates handled it
+
+| Run | Stopped at | Cause | Fix |
+|---|---|---|---|
+| [40101655023](https://github.com/aneeq178/dealership-inventory/actions/runs/40101655023) | Configuration check | Two secrets saved empty: paste into `gh`'s hidden prompt does nothing in Windows terminals | Re-saved with `--body (Get-Clipboard)` |
+| same, re-run | Worker upload | pywrangler reads only `wrangler.jsonc`/`.toml` | PR #5; the step now fails on the real error (`pipefail`) |
+| [40102776766](https://github.com/aneeq178/dealership-inventory/actions/runs/40102776766) | Worker upload | Cloudflare rejected the token: malformed header (9106) | PR #6 adds a token check before any migration |
+| [40103429028](https://github.com/aneeq178/dealership-inventory/actions/runs/40103429028) | Token check, then smoke test | Token value wrong (139 chars); then Cloudflare blocked Python's default user agent (1010) | Token re-saved via GitHub's web page; PR #7 sets a user agent |
+| [40104512958](https://github.com/aneeq178/dealership-inventory/actions/runs/40104512958) | none | | All jobs green |
+
+No failure deployed broken code or left the database half-migrated: each stopped at the
+first step that could detect it.
+
 ### Health verification
 
 After deploying, the job polls `GET /api/health` until it reports `"db":"ok"` and the new git
@@ -387,12 +424,11 @@ either step fails the run.
 
 ## Known limitations
 
-- **Not deployed yet.** The deploy job is built but has not run. It needs the Cloudflare and
-  Neon accounts. Nothing about the live behaviour is verified until then.
 - **Weaker password hashing on Cloudflare.** The free plan's 10 ms CPU budget forces far fewer
   PBKDF2 iterations than the 600,000 used locally. Each hash still has a random salt, and the
   stored iteration count lets it be raised on a paid plan.
-- **Worker CPU time per request is unmeasured** until the first deploy.
+- **Exact Worker CPU per request not captured.** No CPU-limit errors were seen in about 75
+  live requests, but the per-request figure was not read from Cloudflare's dashboard.
 - **No live rollback rehearsal.** Release recovery is documented but untested.
 - **Token in `sessionStorage`.** Readable by JavaScript, so an XSS bug could steal it. An
   httpOnly cookie would avoid that but needs CSRF protection. With static files and a strict
