@@ -1,5 +1,8 @@
 # Dealership Inventory — Delivery Plan
 
+> Original plan, written before implementation. What was actually built, and where it differs,
+> is in [WORKLOG.md](WORKLOG.md) and [DECISIONS.md](DECISIONS.md). Deployment target: Cloudflare.
+
 Deployment target is deferred (Cloudflare vs Railway/GCP, pending HR). Everything below is
 deployment-agnostic; the deploy job in CI is the only piece that changes later.
 

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.development
 
 # python
 __pycache__/
@@ -29,3 +30,6 @@ blob-report/
 .idea/
 .DS_Store
 Thumbs.db
+
+# local tool config
+.claude/
