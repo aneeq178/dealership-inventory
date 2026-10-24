@@ -84,7 +84,7 @@ backend/
   tests/              pytest API tests against real Postgres
 cloudflare/
   src/entry.py        Worker entrypoint: same FastAPI app, Worker-native DB + settings
-  configure.py        renders wrangler.json and bundles backend/app at deploy time
+  configure.py        renders wrangler.jsonc and bundles backend/app at deploy time
   tests/              WebCrypto password hashing check under Pyodide
 frontend/
   app/                pages: /login, /vehicles, /vehicles/edit?id=

@@ -1,5 +1,5 @@
 # Generated per deploy by configure.py
-wrangler.json
+wrangler.jsonc
 src/app/
 
 # Tooling
