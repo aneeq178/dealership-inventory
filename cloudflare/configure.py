@@ -1,10 +1,11 @@
-"""Render wrangler.json from wrangler.template.json and copy the backend app into src/.
+"""Render wrangler.jsonc from wrangler.template.json and copy the backend app into src/.
 
 Usage (from the repo root; CI runs this before every deploy):
     python cloudflare/configure.py --hyperdrive-id <id> --app-version <git sha> \
         --password-hash-iterations <n>
 
-- wrangler.json is generated, not committed: it carries per-deploy values (the git SHA shown
+- wrangler.jsonc is generated, not committed (pywrangler only reads wrangler.jsonc or
+  wrangler.toml; plain JSON is valid JSONC): it carries per-deploy values (the git SHA shown
   by /api/health) and the account-specific Hyperdrive config id.
 - backend/app is copied to cloudflare/src/app because Cloudflare uploads the .py files under
   the entry module's folder. backend/ stays a normal FastAPI project for local dev and tests.
@@ -33,7 +34,7 @@ def main() -> None:
         .replace("__PASSWORD_HASH_ITERATIONS__", str(args.password_hash_iterations))
     )
     config = json.loads(rendered)  # fail fast on a broken template
-    (HERE / "wrangler.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    (HERE / "wrangler.jsonc").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
     target = HERE / "src" / "app"
     shutil.rmtree(target, ignore_errors=True)
@@ -42,7 +43,7 @@ def main() -> None:
         target,
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
     )
-    print(f"wrote {HERE / 'wrangler.json'} and copied backend/app -> {target}")
+    print(f"wrote {HERE / 'wrangler.jsonc'} and copied backend/app -> {target}")
 
 
 if __name__ == "__main__":
