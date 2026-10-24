@@ -1,0 +1,11 @@
+{
+  "name": "dealerdesk-worker-checks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:webcrypto": "node tests/webcrypto_parity.mjs"
+  },
+  "devDependencies": {
+    "pyodide": "314.0.7"
+  }
+}

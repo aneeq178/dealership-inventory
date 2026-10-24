@@ -120,3 +120,43 @@ This saves minutes. The red run had to finish before the fix was pushed, so its 
 recorded.
 
 **Python 3.13 in CI.** Cloudflare Python Workers require it. Local development also works on 3.12.
+
+## Cloudflare deployment
+
+**One Worker for API and frontend, on the free `workers.dev` URL.**
+The static export is uploaded as Workers static assets; `run_worker_first: ["/api/*"]` sends
+only API calls to Python. Pages never spend Worker CPU or count as Worker invocations, and the
+browser sees one origin, so there is no CORS and no cookie or domain complexity.
+
+**FastAPI on Python Workers, unchanged.**
+`cloudflare/src/entry.py` builds the same app and overrides three FastAPI dependencies:
+connection, health ping, and settings. Business code, SQL and tests are shared with local and
+CI. The app factory reads no configuration at import time, because Cloudflare imports and
+snapshots the module at deploy time, before any secret exists.
+
+**Neon Postgres through Hyperdrive.**
+The job's stack is Postgres, and the concurrency fix relies on Postgres row locking.
+Cloudflare's own database, D1, is SQLite and would have meant re-validating the atomic update.
+Hyperdrive keeps pooled connections close to Neon, so a connection per request is cheap.
+It is included in the free plan. Its query cache is turned off: a cached read could show
+values from before a save, which would undermine both "persists on reload" and the conflict
+panel's "current values".
+
+**Password hashing via WebCrypto with fewer iterations.**
+The free plan allows 10 ms of CPU per request. PBKDF2 compiled to WebAssembly is far too slow,
+so the Worker calls the runtime's native WebCrypto PBKDF2. Even native, 600,000 iterations
+costs about 370 ms. The deployed default is 10,000, about 6 ms. This is the main security
+tradeoff of the free-plan requirement. It is configurable without code changes and
+documented as a limitation.
+
+**Deploy packaging copies `backend/app` into `cloudflare/src/app`.**
+Cloudflare uploads every `.py` file under the entry module's folder, including virtualenvs.
+Copying keeps `backend/` a normal Python project and the Worker bundle minimal.
+
+**Seeding on deploy is `--if-empty` only.**
+A first deploy gets demo data. Later deploys never wipe edits. A full reset is an explicit
+manual-run option.
+
+**Manual runs with a `ref` input.**
+Rollback reuses the same gated path as a normal release: check, then deploy that commit.
+`wrangler rollback` stays available for an instant revert.

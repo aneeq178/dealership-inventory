@@ -120,15 +120,27 @@ It passed 15 of 15 against `http://localhost:8000`.
 - `docs/screenshots/` holds six screenshots, regenerated with
   `SCREENSHOTS=1 npx playwright test screenshots`.
 
+## 7. Cloudflare deployment pipeline → PR #4, branch `feat/cloudflare-deploy`
+
+| Area | Change | Verified by |
+|---|---|---|
+| App factory | `create_app(AppOptions)`, nothing read at import; uvicorn uses `--factory` | 54 pytest, 7 E2E |
+| Password hashing | Async verify; WebCrypto PBKDF2 when running under Pyodide, `hashlib` otherwise | RFC 7914 vector in pytest; `cloudflare/tests/webcrypto_parity.mjs` under Pyodide 314.0.7 |
+| Seed | `--if-empty` mode for deploys | Ran both modes locally |
+| Worker | `cloudflare/src/entry.py`: Hyperdrive connection per request, settings from `env` | `backend/tests/test_worker_entry.py` with a stub runtime and a fake Hyperdrive binding |
+| Config | `cloudflare/wrangler.template.json`, `configure.py`, `pyproject.toml` | CI renders a test config |
+| CI/CD | Manual trigger with `ref`, `deploy`, `reset_demo_data`; new `worker` job; gated `deploy` job | YAML parsed; deploy not run yet |
+
+Measured native PBKDF2 at about 0.6 µs per iteration, which led to a default of 10,000
+iterations on Cloudflare.
+
 ## Not done (next steps)
 
-1. **Cloudflare deployment.** Create a Neon or Supabase Postgres database and a Hyperdrive
-   config. Add the Worker entrypoint that overrides `get_conn` and `db_ping` to use Hyperdrive.
-   Add `wrangler` config with static assets from `frontend/out`. Add the `deploy` job to
-   `ci.yml` with `needs: [backend, frontend, e2e]`, main only, ending with
-   `scripts/smoke.py $APP_URL`. Measure PBKDF2 CPU time against the free-plan limit.
-2. **Secrets.** You add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` and
-   `JWT_SECRET` in GitHub, under Settings, Secrets and variables, Actions.
+1. **Accounts and secrets.** These are yours: the Cloudflare account and API token, the Neon
+   project, the Hyperdrive config, and four GitHub secrets. Steps are in the README's
+   Deployment section.
+2. **First deploy.** Merge PR #4 once secrets exist. Check Cloudflare's logs for CPU time per
+   request and tune `PASSWORD_HASH_ITERATIONS` if needed.
 3. **Repo visibility.** Make it public, or invite reviewers. Branch protection that requires the
    three checks is only enforced on public repos with a free GitHub plan.
 4. **Loom.** Record it, then add the link to the README.

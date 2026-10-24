@@ -29,7 +29,7 @@ export default defineConfig({
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // Rebuild schema + seed, then serve API and built frontend together.
-    command: `"${PYTHON}" -m scripts.reset && "${PYTHON}" -m uvicorn app.main:app --port ${PORT}`,
+    command: `"${PYTHON}" -m scripts.reset && "${PYTHON}" -m uvicorn app.main:create_app --factory --port ${PORT}`,
     cwd: BACKEND_DIR,
     url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: !CI,

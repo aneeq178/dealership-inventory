@@ -1,0 +1,28 @@
+{
+  "name": "dealerdesk",
+  "main": "src/entry.py",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["python_workers"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "../frontend/out",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "__HYPERDRIVE_ID__"
+    }
+  ],
+  "vars": {
+    "APP_VERSION": "__APP_VERSION__",
+    "ACCESS_TOKEN_TTL_MINUTES": "30",
+    "PASSWORD_HASH_ITERATIONS": "__PASSWORD_HASH_ITERATIONS__"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

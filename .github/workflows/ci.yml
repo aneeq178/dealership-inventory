@@ -1,15 +1,35 @@
-name: CI
+name: CI/CD
 
-# Runs on every pull request and on every push to main.
-# Deployment (added later) will depend on these jobs, so a failing check blocks a release.
+# Automatic:
+#   - every pull request: all checks (never deploys)
+#   - every push to main: all checks, then deploy to Cloudflare only if every check passed
+# Manual (Actions tab -> CI/CD -> Run workflow):
+#   - run the checks on any branch, commit or tag
+#   - on main, optionally deploy the chosen commit (an older SHA = rollback)
+#   - optionally reset the demo data to the seed state
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit SHA, branch or tag to test (and deploy). Empty = the branch selected above. An older SHA rolls back."
+        required: false
+        default: ""
+      deploy:
+        description: "Deploy to Cloudflare after all checks pass (only when run on main)"
+        type: boolean
+        default: true
+      reset_demo_data:
+        description: "Reset demo accounts and vehicles to the seed state (wipes edits)"
+        type: boolean
+        default: false
 
+# Superseded PR runs are cancelled; runs on main (which may deploy) are never cancelled.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -39,6 +59,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -62,7 +84,7 @@ jobs:
           python -m scripts.migrate
           python -m scripts.seed
 
-      - name: Tests (pytest against real Postgres)
+      - name: Tests (pytest against real Postgres, incl. the Worker entry wiring)
         run: pytest -v --junitxml=junit-backend.xml
 
       - name: Upload test report
@@ -80,6 +102,8 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-node@v4
         with:
@@ -99,6 +123,37 @@ jobs:
       - name: Build static export
         run: npm run build
 
+  worker:
+    name: Worker · Cloudflare entry checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+
+      - name: WebCrypto password hashing under Pyodide matches the standard
+        working-directory: cloudflare
+        run: |
+          npm ci
+          npm run test:webcrypto
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Lint Worker code and render a test config
+        run: |
+          pip install ruff==0.17.2
+          ruff check cloudflare
+          ruff format --check cloudflare
+          python cloudflare/configure.py --hyperdrive-id ci-check --app-version ci --password-hash-iterations 10000
+
   e2e:
     name: E2E · Playwright against API + built frontend
     needs: [backend, frontend]
@@ -116,6 +171,8 @@ jobs:
           --health-interval 2s --health-timeout 3s --health-retries 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -153,3 +210,139 @@ jobs:
           path: |
             frontend/playwright-report
             frontend/test-results
+
+  deploy:
+    name: Deploy · Cloudflare
+    # Gate: every check above must pass, and only main can deploy (never a pull request).
+    needs: [backend, frontend, worker, e2e]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' && inputs.deploy))
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.url }}
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      HYPERDRIVE_ID: ${{ vars.HYPERDRIVE_ID }}
+      # Kept low enough for the Workers free plan's 10 ms CPU budget (see README).
+      PASSWORD_HASH_ITERATIONS: ${{ vars.PASSWORD_HASH_ITERATIONS || '10000' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - name: Check deployment configuration is present
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          missing=""
+          [ -n "$CLOUDFLARE_API_TOKEN" ]  || missing="$missing secret:CLOUDFLARE_API_TOKEN"
+          [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || missing="$missing secret:CLOUDFLARE_ACCOUNT_ID"
+          [ -n "$DATABASE_URL" ]          || missing="$missing secret:DATABASE_URL"
+          [ -n "$JWT_SECRET" ]            || missing="$missing secret:JWT_SECRET"
+          [ -n "$HYPERDRIVE_ID" ]         || missing="$missing variable:HYPERDRIVE_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing deployment configuration:$missing (see README > Deployment)"
+            exit 1
+          fi
+          echo "VERSION=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend (static export, same-origin API)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Install migration tools and uv
+        run: pip install -r backend/requirements.txt uv==0.13.5
+
+      - name: Migrate database (forward-only)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: python -m scripts.migrate
+
+      - name: Seed demo data (only if empty, unless a reset was requested)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          RESET: ${{ inputs.reset_demo_data && 'true' || 'false' }}
+        run: |
+          if [ "$RESET" = "true" ]; then
+            python -m scripts.seed
+          else
+            python -m scripts.seed --if-empty
+          fi
+
+      - name: Render Worker config and bundle the API
+        run: >-
+          python cloudflare/configure.py
+          --hyperdrive-id "$HYPERDRIVE_ID"
+          --app-version "$VERSION"
+          --password-hash-iterations "$PASSWORD_HASH_ITERATIONS"
+
+      - name: Deploy Worker (API + static frontend)
+        id: deploy
+        working-directory: cloudflare
+        run: |
+          uv run pywrangler deploy 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' deploy.log | head -1)
+          [ -n "$url" ] || url="${{ vars.APP_URL }}"
+          [ -n "$url" ] || { echo "::error::Could not determine the deployed URL"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Set Worker secret (JWT_SECRET from GitHub Secrets)
+        working-directory: cloudflare
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: printf '%s' "$JWT_SECRET" | npx --yes wrangler@4 secret put JWT_SECRET
+
+      - name: Wait for the new version to be healthy
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          for i in $(seq 1 30); do
+            body=$(curl -fsS "$URL/api/health" || true)
+            echo "attempt $i: $body"
+            if echo "$body" | grep -q "\"db\":\"ok\"" && echo "$body" | grep -q "\"version\":\"$VERSION\""; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::$URL/api/health did not report version $VERSION with db ok"
+          exit 1
+
+      - name: Smoke test the live deployment
+        run: python backend/scripts/smoke.py "${{ steps.deploy.outputs.url }}"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deployment"
+            echo "- URL: ${{ steps.deploy.outputs.url }}"
+            echo "- Version: ${VERSION:-unknown}"
+            echo "- PBKDF2 iterations: $PASSWORD_HASH_ITERATIONS"
+            echo "- Demo data reset: ${{ inputs.reset_demo_data && 'yes' || 'no' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,11 @@
+# Generated per deploy by configure.py
+wrangler.json
+src/app/
+
+# Tooling
+.venv/
+python_modules/
+.wrangler/
+node_modules/
+uv.lock
+.dev.vars
