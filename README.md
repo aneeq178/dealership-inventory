@@ -6,12 +6,12 @@ Each user belongs to exactly one dealership and is either an **administrator** (
 either change being silently lost.
 
 **Stack:** Next.js 16 (static export) · FastAPI (Python 3.13) · PostgreSQL 16 · GitHub Actions ·
-Cloudflare (deployment pending, see [status](#status)).
+Cloudflare Workers (deployment built, waiting on account setup, see [status](#status)).
 
 | | |
 |---|---|
 | Repository | https://github.com/aneeq178/dealership-inventory |
-| Deployed app | _Not deployed yet. See [Deployment](#deployment-cloudflare)._ |
+| Deployed app | _Pending: Cloudflare and Neon accounts must be set up first. See [Deployment](#deployment-cloudflare)._ |
 | Loom walkthrough | _To be recorded._ |
 | Lost-update demo, red run | [CI run 40089597027](https://github.com/aneeq178/dealership-inventory/actions/runs/40089597027) on `de5c4fc` |
 | Lost-update demo, green run | [CI run 40089805129](https://github.com/aneeq178/dealership-inventory/actions/runs/40089805129) on `6dc1a40` |
@@ -30,12 +30,12 @@ Honest summary of what is done and verified versus still open.
 | Loading, invalid credentials, expiry/invalidation, forbidden, API failure states (4.1) | Done, verified | E2E `access.spec.ts`, manual review |
 | Auth, role and dealership enforcement with direct API tests; rejected writes leave data unchanged (4.2) | Done, verified | `tests/test_auth.py`, `tests/test_access.py` |
 | CI runs tests and build on PRs (4.3) | Done, verified | Actions tab, PRs #1 to #3 |
-| Deploy to Cloudflare only after checks pass; secrets in GitHub (4.3) | **Not done** | Planned in [Deployment](#deployment-cloudflare) |
+| Deploy to Cloudflare only after checks pass; secrets in GitHub (4.3) | Built; **not yet run** (needs accounts) | `deploy` job in `ci.yml`, [Deployment](#deployment-cloudflare) |
 | Atomic lost-update prevention + regression test that fails on the defect (4.4) | Done, verified | Red and green runs above, `tests/test_concurrency.py` |
 | Frontend explains conflict and asks to refresh (4.4) | Done, verified | E2E `conflict.spec.ts` |
 | Repeatable seed: 2 dealerships, 6 users, 8 vehicles, hashed passwords (5) | Done, verified | `scripts/seed.py`, `scripts/reset.py` |
 | Frontend E2E for login, inventory, allowed update (5) | Done, verified | 7 Playwright tests |
-| Smoke test against the deployed app (5) | Script done, verified locally only | `scripts/smoke.py`, 15/15 against localhost |
+| Smoke test against the deployed app (5) | Wired into the deploy job; verified locally only so far | `scripts/smoke.py`, 15/15 against localhost |
 | Health endpoint without secrets (6.1) | Done, verified | `GET /api/health`, `tests/test_health.py` |
 
 ---
@@ -61,9 +61,9 @@ Use **Alice and Bob** (or Sara and Tom) to reproduce the concurrent-edit conflic
 ## Architecture
 
 ```
-Browser ──► Next.js static files (HTML/JS/CSS)
+Browser ──► Next.js static files (HTML/JS/CSS)        Cloudflare static assets
    │
-   └──► /api/*  FastAPI ──► PostgreSQL
+   └──► /api/*  FastAPI ──► PostgreSQL                 Python Worker ─► Hyperdrive ─► Neon
                  │
                  ├─ api/        routes + auth dependencies (current_user, require_admin)
                  ├─ services/   use cases (login, update with conflict handling)
@@ -82,6 +82,10 @@ backend/
   migrations/         forward-only SQL migrations (001_init.sql)
   scripts/            migrate, seed, reset, smoke
   tests/              pytest API tests against real Postgres
+cloudflare/
+  src/entry.py        Worker entrypoint: same FastAPI app, Worker-native DB + settings
+  configure.py        renders wrangler.json and bundles backend/app at deploy time
+  tests/              WebCrypto password hashing check under Pyodide
 frontend/
   app/                pages: /login, /vehicles, /vehicles/edit?id=
   components/         UI primitives, app shell, auth provider, toasts
@@ -109,7 +113,7 @@ python -m venv .venv
 .venv/Scripts/pip install -r requirements-dev.txt   # macOS/Linux: .venv/bin/pip
 cp .env.example .env
 .venv/Scripts/python -m scripts.reset               # create DB, migrate, seed
-.venv/Scripts/python -m uvicorn app.main:app --reload --port 8000
+.venv/Scripts/python -m uvicorn app.main:create_app --factory --reload --port 8000
 
 # 3. Frontend (new terminal)
 cd frontend
@@ -134,12 +138,15 @@ Names only; no real secrets are committed. See `backend/.env.example` and `front
 | `NEXT_PUBLIC_API_BASE_URL` | frontend | API origin; empty in production (same origin) |
 | `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | frontend | Show demo accounts on the login page |
 
+Deployment configuration is listed under [Deployment](#deployment-cloudflare).
+
 ### Database initialization and reset
 
 | Command (from `backend/`) | What it does |
 |---|---|
 | `python -m scripts.migrate` | Applies pending files in `migrations/`, recorded in `schema_migrations`. Safe to re-run. |
 | `python -m scripts.seed` | Truncates data tables and inserts the fixed seed rows (same UUIDs every time). |
+| `python -m scripts.seed --if-empty` | Seeds only when no dealerships exist. Used by every deploy. |
 | `python -m scripts.reset` | Creates the database if missing, drops all tables, migrates, seeds. Local and CI only. |
 
 ---
@@ -148,7 +155,8 @@ Names only; no real secrets are committed. See `backend/.env.example` and `front
 
 | Command | What runs |
 |---|---|
-| `cd backend && .venv/Scripts/python -m pytest -v` | 45 API tests against a real Postgres test database |
+| `cd backend && .venv/Scripts/python -m pytest -v` | 54 tests: API, hashing, and the Worker entry wiring, against a real Postgres test database |
+| `cd cloudflare && npm ci && npm run test:webcrypto` | Runs the Worker's WebCrypto password hashing under Pyodide and checks it against the RFC vector and Node's PBKDF2 |
 | `cd backend && .venv/Scripts/ruff check . && .venv/Scripts/mypy` | Lint and type check |
 | `cd frontend && npm run lint && npm run typecheck && npm run build` | Lint, type check, static build |
 | `cd frontend && npm run test:e2e` | Builds the frontend, then 7 Playwright tests against the real stack |
@@ -178,7 +186,8 @@ development data. Each test reseeds, so tests are independent and repeatable.
 ### Latest local results
 
 ```
-backend   pytest      45 passed
+backend   pytest      54 passed
+worker    pyodide     WebCrypto PBKDF2 matches RFC 7914 and node:crypto
 backend   ruff, mypy  clean
 frontend  eslint, tsc, next build  clean
 e2e       playwright  7 passed (3 consecutive runs)
@@ -204,7 +213,8 @@ or URL. Request bodies reject unknown fields, so a client cannot even send `deal
 
 ## Authentication, expiry and logout
 
-- **Login** checks a PBKDF2-SHA256 hash (600,000 iterations, random salt), creates a `sessions`
+- **Login** checks a PBKDF2-SHA256 hash (random salt; 600,000 iterations locally, fewer on
+  Cloudflare, see [Deployment](#deployment-cloudflare)), creates a `sessions`
   row, and returns a 30-minute HS256 JWT containing the user id and session id. Wrong email and
   wrong password return the same error and take the same time.
 - **Each request** verifies the JWT, then requires the session to exist, be unrevoked and
@@ -267,8 +277,8 @@ git checkout HEAD -- app/repositories/vehicles.py         # fixed version
 .venv/Scripts/python -m pytest tests/test_concurrency.py  # 2 passed
 ```
 
-The defective variant was never deployed. Nothing has been deployed yet, and the planned deploy
-job only runs after every check passes on `main`.
+The defective variant was never deployed. The deploy job only runs after every check passes on
+`main`, and the fix merged before any deployment existed.
 
 ### Reproducing the conflict in the UI
 
@@ -287,54 +297,100 @@ job only runs after every check passes on `main`.
 
 ## CI/CD
 
-`.github/workflows/ci.yml` runs on every pull request and every push to `main`:
+`.github/workflows/ci.yml` runs **automatically** on every pull request and every push to
+`main`, and **manually** from the Actions tab (CI/CD, then Run workflow).
 
 | Job | Steps | Depends on |
 |---|---|---|
 | Backend | ruff, mypy, migrate and seed an empty DB, pytest against a Postgres service | none |
 | Frontend | eslint, tsc, static build | none |
+| Worker | WebCrypto hashing under Pyodide, lint, render a test Wrangler config | none |
 | E2E | Build frontend, start API serving it, Playwright against a Postgres service | Backend, Frontend |
+| Deploy | Build, migrate, seed if empty, deploy Worker, set secret, wait for health, smoke test | **all four above** |
 
-**Gating.** The deploy job, still to be added, will declare `needs: [backend, frontend, e2e]` and
-run only on `main`. A failing check means it never starts. Pull requests never deploy.
+**Gating.** The deploy job lists every check under `needs`, so any failing check means it never
+starts. It runs only for `main`: on a push, or on a manual run with "deploy" ticked. Pull
+requests never deploy. Superseded pull-request runs are cancelled; runs on `main` never are.
+
+**Manual run options:**
+
+| Input | Effect |
+|---|---|
+| `ref` | Commit, branch or tag to test and deploy. Empty means the selected branch. An older SHA rolls back. |
+| `deploy` | Deploy after checks pass. Only applies on `main`. |
+| `reset_demo_data` | Reset accounts and vehicles to the seed state. Wipes edits. Never happens automatically. |
 
 ---
 
 ## Deployment (Cloudflare)
 
-**Not done yet.** The plan below is ready to implement. The code was shaped for it already.
+One Cloudflare Worker serves everything on its free `workers.dev` URL:
 
-| Part | Plan |
+| Part | How |
 |---|---|
-| Frontend | `frontend/out` served as Workers Static Assets from the same Worker as the API |
-| API | FastAPI on Cloudflare Python Workers, which have supported FastAPI's ASGI interface since GA in September 2026 |
-| Database | Hosted Postgres (Neon or Supabase) through Cloudflare Hyperdrive, with asyncpg |
-| DB connection | Override the `get_conn` and `db_ping` FastAPI dependencies to connect through the Hyperdrive binding. No other code changes. |
-| Secrets | GitHub Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` (for migrations), `JWT_SECRET` (pushed as a Worker secret) |
-| Deploy job | `needs: [backend, frontend, e2e]`, main only. Build, migrate, deploy, then run `scripts/smoke.py` against the live URL and fail the job if it fails. |
-| Health check | `GET /api/health` returns `{"status":"ok","db":"ok","version":"<git sha>"}` |
+| Frontend | `frontend/out` uploaded as static assets. Pages never run Python and cost no Worker CPU. |
+| API | The same FastAPI app on Cloudflare Python Workers. Only `/api/*` reaches it (`run_worker_first`). |
+| Database | Neon Postgres (free tier) through Cloudflare Hyperdrive, one asyncpg connection per request |
+| Settings | Read from the Worker's `env`: `JWT_SECRET` is a Worker secret; other values are Wrangler vars |
+| Entry point | `cloudflare/src/entry.py` swaps the DB and settings dependencies. No business code changes. |
 
-**Known risk.** The Workers free plan limits CPU time per request. PBKDF2 at 600,000 iterations
-may exceed it on login. Options are lowering iterations for this demo, or hashing through the
-Workers WebCrypto API. This needs measuring during deployment.
+### Configuration
+
+Values live in GitHub, never in the repository:
+
+| Name | Kind | Value |
+|---|---|---|
+| `CLOUDFLARE_API_TOKEN` | Secret | API token from the "Edit Cloudflare Workers" template |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret | Cloudflare account ID |
+| `DATABASE_URL` | Secret | Neon direct connection string, used by CI for migrations and seeding |
+| `JWT_SECRET` | Secret | Random, at least 32 characters. CI pushes it to the Worker as a secret. |
+| `HYPERDRIVE_ID` | Variable | ID of the Hyperdrive config pointing at Neon (not secret) |
+| `PASSWORD_HASH_ITERATIONS` | Variable | Optional, default 10000. See the CPU budget below. |
+| `APP_URL` | Variable | Optional fallback if the deploy log does not show the URL |
+
+If anything required is missing, the deploy job fails at its first step and names what is missing.
+
+### Free plan CPU budget and password hashing
+
+The Workers free plan allows **10 ms of CPU per request**. Waiting on the database does not count.
+
+- On Cloudflare, password checks use the runtime's native WebCrypto PBKDF2 instead of Python
+  code compiled to WebAssembly. Both give identical results, which CI checks under Pyodide.
+- Native PBKDF2-SHA256 measured about 0.6 µs per iteration on the development machine. 600,000
+  iterations would cost about 370 ms, so the deployed seed uses **10,000 iterations** by
+  default, about 6 ms. That is a deliberate, documented weakening forced by the free plan.
+- Each stored hash records its own iteration count. Raising `PASSWORD_HASH_ITERATIONS` and
+  rerunning with `reset_demo_data` rehashes the demo accounts. No code change is needed.
+
+### Health verification
+
+After deploying, the job polls `GET /api/health` until it reports `"db":"ok"` and the new git
+SHA as `version`. Then it runs `backend/scripts/smoke.py` against the live URL. A failure in
+either step fails the run.
 
 ### Release recovery
 
-1. **Code rollback.** Redeploy the last good commit by running the deploy workflow manually on
-   that SHA, or use `wrangler rollback` to restore the previous Worker version.
-2. **Verify.** Check `/api/health` for the expected `version`, then run the smoke script.
+1. **Roll back code.** Run the workflow manually on `main` with `ref` set to the last good SHA.
+   That commit is checked, then deployed. For an immediate rollback without rebuilding, run
+   `npx wrangler rollback` from `cloudflare/` to restore the previous Worker version.
+2. **Verify.** Check that `/api/health` reports the expected `version`, then run the smoke script.
 3. **Database limitation.** Migrations are forward-only, and rolling back code does not roll
    back the schema. This is safe while migrations are additive: new tables and nullable
    columns. A destructive change, such as dropping or renaming a column, must be split across
-   two releases: first add and backfill, then switch the code over, and only then drop. That way
-   the previous release keeps working against the newer schema. Data written by a bad release
-   is not undone automatically.
+   two releases: first add and backfill, then switch the code over, and only then drop. That
+   way the previous release keeps working against the newer schema. Data written by a bad
+   release is not undone automatically. Neon's point-in-time restore is the last resort.
 
 ---
 
 ## Known limitations
 
-- **Not deployed.** The Cloudflare deploy job and live smoke test are not done.
+- **Not deployed yet.** The deploy job is built but has not run. It needs the Cloudflare and
+  Neon accounts. Nothing about the live behaviour is verified until then.
+- **Weaker password hashing on Cloudflare.** The free plan's 10 ms CPU budget forces far fewer
+  PBKDF2 iterations than the 600,000 used locally. Each hash still has a random salt, and the
+  stored iteration count lets it be raised on a paid plan.
+- **Worker CPU time per request is unmeasured** until the first deploy.
 - **No live rollback rehearsal.** Release recovery is documented but untested.
 - **Token in `sessionStorage`.** Readable by JavaScript, so an XSS bug could steal it. An
   httpOnly cookie would avoid that but needs CSRF protection. With static files and a strict
