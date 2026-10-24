@@ -254,6 +254,27 @@ jobs:
           fi
           echo "VERSION=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
 
+      - name: Verify the Cloudflare API token (before touching the database)
+        # Prints only the token's length, whether it contains whitespace, and Cloudflare's
+        # verdict on it. The token itself is never printed (and GitHub masks it anyway).
+        run: |
+          len=${#CLOUDFLARE_API_TOKEN}
+          if [[ "$CLOUDFLARE_API_TOKEN" =~ [[:space:]] ]]; then
+            echo "::error::CLOUDFLARE_API_TOKEN contains spaces or line breaks (length $len). Re-save only the token text."
+            exit 1
+          fi
+          body=$(curl -sS https://api.cloudflare.com/client/v4/user/tokens/verify \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
+          verdict=$(printf '%s' "$body" | python3 -c 'import json,sys
+          d = json.load(sys.stdin)
+          print("ok" if d.get("success") and d.get("result", {}).get("status") == "active" else "bad",
+                (d.get("result") or {}).get("status"), [e.get("code") for e in d.get("errors", [])])')
+          echo "token length: $len; Cloudflare says: $verdict"
+          case "$verdict" in
+            ok*) ;;
+            *) echo "::error::Cloudflare rejected CLOUDFLARE_API_TOKEN ($verdict). Re-save the token value."; exit 1 ;;
+          esac
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
