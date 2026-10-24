@@ -134,13 +134,28 @@ It passed 15 of 15 against `http://localhost:8000`.
 Measured native PBKDF2 at about 0.6 µs per iteration, which led to a default of 10,000
 iterations on Cloudflare.
 
+## 8. First deployment → PRs #5, #6, #7, live
+
+Accounts and secrets were created by the repository owner; I read the dashboards, saved the
+two non-secret values (Account ID, Hyperdrive ID), deleted a Hyperdrive config at the owner's
+request, and fixed each pipeline failure:
+
+| Problem | Found by | Fix |
+|---|---|---|
+| Hyperdrive created with Neon's pooled host | Reading the Hyperdrive list | Recreated on the direct host, caching off |
+| Two secrets empty | Deploy config check | Re-saved from the clipboard |
+| pywrangler ignores `wrangler.json` | Deploy log | PR #5: `wrangler.jsonc`, `pipefail` |
+| Token rejected (9106, then 6003) | Deploy log, then the new token check | PR #6 check; token re-saved via GitHub's page |
+| Cloudflare blocks `Python-urllib` (1010) | Smoke step vs. curl | PR #7: explicit user agent |
+
+Green run: [40104512958](https://github.com/aneeq178/dealership-inventory/actions/runs/40104512958). Live at https://dealerdesk.aneeq02025.workers.dev:
+health ok, smoke 15/15, `scripts/live_race.py` 5/5 (added in this step).
+
 ## Not done (next steps)
 
-1. **Accounts and secrets.** These are yours: the Cloudflare account and API token, the Neon
-   project, the Hyperdrive config, and four GitHub secrets. Steps are in the README's
-   Deployment section.
-2. **First deploy.** Merge PR #4 once secrets exist. Check Cloudflare's logs for CPU time per
-   request and tune `PASSWORD_HASH_ITERATIONS` if needed.
+1. **Rotate the Cloudflare API token.** Its value appeared in a screenshot during setup.
+   Roll it and update `CLOUDFLARE_API_TOKEN` through GitHub's secrets page.
+2. **Read exact CPU time per request** from Cloudflare's dashboard and note it in the README.
 3. **Repo visibility.** Make it public, or invite reviewers. Branch protection that requires the
    three checks is only enforced on public repos with a free GitHub plan.
 4. **Loom.** Record it, then add the link to the README.

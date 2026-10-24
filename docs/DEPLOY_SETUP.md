@@ -34,7 +34,9 @@ Dashboard labels change over time; if a name differs slightly, look for the clos
 
 1. Cloudflare dashboard → **Storage & databases** → **Postgres & MySQL (Hyperdrive)** →
    **Connect database**.
-2. Name it `dealerdesk-neon` and paste the Neon direct connection string.
+2. Name it `dealerdesk-neon` and paste the Neon **direct** connection string. Its host must not
+   contain `-pooler`. If it does, delete the config and create it again: editing the
+   connection details froze the Cloudflare dashboard during setup.
 3. **Turn caching off.** Hyperdrive caches read queries for up to 60 seconds by default. That
    would let a page reload or a conflict message show values from before a save.
 4. Create it and copy the configuration **ID**. The ID is not secret.
@@ -50,6 +52,14 @@ On the **Secrets** tab, add:
 | `CLOUDFLARE_API_TOKEN` | Token from step 2 |
 | `CLOUDFLARE_ACCOUNT_ID` | Account ID from step 1 |
 | `DATABASE_URL` | Neon direct connection string from step 3 |
+
+**Paste values in GitHub's web page, not in a terminal prompt.** In Windows terminals,
+pasting into `gh secret set`'s hidden "Paste your secret" prompt can silently save an empty
+value. Alternatively copy the value, then run
+`gh secret set NAME --repo aneeq178/dealership-inventory --body ((Get-Clipboard) -join '').Trim()`.
+A Cloudflare API token is one line (the current format starts with `cfut_`, about 53
+characters). Copy it with the button beside the token itself, not the example `curl` command.
+Never paste a token into a chat or screenshot.
 
 Create `JWT_SECRET` with this command. It generates a random value and stores it without
 printing it:
