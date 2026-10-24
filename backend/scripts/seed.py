@@ -1,12 +1,15 @@
 """Deterministic seed data: 2 dealerships, 6 users (2 admins + 1 viewer each), 8 vehicles.
 
-Usage (from backend/):  python -m scripts.seed
+Usage (from backend/):
+    python -m scripts.seed              # reset data to the seed state (truncates first)
+    python -m scripts.seed --if-empty   # seed only if no dealerships exist (safe on deploy)
 
 Repeatable: it truncates the data tables and re-inserts the same rows with the same fixed
 UUIDs every time, so tests, the README and the smoke test can all refer to known records.
 It does NOT touch the schema; use scripts.reset for a full rebuild.
 """
 
+import argparse
 import asyncio
 from functools import lru_cache
 from uuid import UUID
@@ -175,9 +178,12 @@ async def seed(conn: asyncpg.Connection) -> None:
         )
 
 
-async def main() -> None:
+async def main(if_empty: bool) -> None:
     conn = await asyncpg.connect(get_settings().database_url)
     try:
+        if if_empty and await conn.fetchval("SELECT EXISTS (SELECT 1 FROM dealerships)"):
+            print("database already has data; skipping seed (--if-empty)")
+            return
         await seed(conn)
         print(
             f"seeded {len(DEALERSHIPS)} dealerships, {len(USERS)} users, {len(VEHICLES)} vehicles"
@@ -187,4 +193,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Load the deterministic seed data.")
+    parser.add_argument(
+        "--if-empty", action="store_true", help="only seed when no dealerships exist"
+    )
+    asyncio.run(main(parser.parse_args().if_empty))

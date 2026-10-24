@@ -29,9 +29,10 @@ async def login(
 ) -> LoginResponse:
     user = await users.get_by_email(conn, email.strip())
     if user is None:
-        burn_password_check(password)  # same timing as a wrong password
+        # Same work as a real check, so a wrong email and a wrong password take equal time.
+        await burn_password_check(password, settings.password_hash_iterations)
         raise InvalidCredentials()
-    if not verify_password(password, user["password_hash"]):
+    if not await verify_password(password, user["password_hash"]):
         raise InvalidCredentials()
 
     expires_at = session_expiry(settings.access_token_ttl_minutes)
