@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect, test as base, type Page } from "@playwright/test";
-import { BACKEND_DIR, PYTHON, TEST_DATABASE_URL } from "./env";
+import { BACKEND_DIR, BACKEND_ENV, PYTHON } from "./env";
 
 export const PASSWORD = "Dealer#2026";
 
@@ -18,11 +18,16 @@ export const VEHICLES = {
 
 /** Truncate and reseed so every test starts from the same known data. */
 export function reseed() {
-  execFileSync(PYTHON, ["-m", "scripts.seed"], {
-    cwd: BACKEND_DIR,
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL, PASSWORD_HASH_ITERATIONS: "1000" },
-    stdio: "ignore",
-  });
+  try {
+    execFileSync(PYTHON, ["-m", "scripts.seed"], {
+      cwd: BACKEND_DIR,
+      env: BACKEND_ENV,
+      stdio: "pipe", // captured so a failure can report stderr
+    });
+  } catch (err) {
+    const stderr = (err as { stderr?: Buffer }).stderr?.toString().trim();
+    throw new Error(`Reseeding the test database failed:\n${stderr || String(err)}`);
+  }
 }
 
 export async function signIn(page: Page, email: string) {

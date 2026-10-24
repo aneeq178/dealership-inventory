@@ -1,6 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import path from "node:path";
-import { BACKEND_DIR, PYTHON, TEST_DATABASE_URL } from "./e2e/env";
+import { BACKEND_DIR, BACKEND_ENV, PYTHON } from "./e2e/env";
 
 /**
  * End-to-end tests run the real stack in its production shape:
@@ -37,14 +36,6 @@ export default defineConfig({
     timeout: 120_000,
     stdout: "ignore",
     stderr: "pipe",
-    env: {
-      ...(process.env as Record<string, string>),
-      DATABASE_URL: TEST_DATABASE_URL,
-      JWT_SECRET: "e2e-only-jwt-secret-0123456789abcdefghij",
-      PASSWORD_HASH_ITERATIONS: "1000",
-      CORS_ORIGINS: "",
-      STATIC_DIR: path.resolve(__dirname, "out"),
-      APP_VERSION: "e2e",
-    },
+    env: BACKEND_ENV as Record<string, string>,
   },
 });
