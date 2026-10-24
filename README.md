@@ -330,7 +330,7 @@ One Cloudflare Worker serves everything on its free `workers.dev` URL:
 |---|---|
 | Frontend | `frontend/out` uploaded as static assets. Pages never run Python and cost no Worker CPU. |
 | API | The same FastAPI app on Cloudflare Python Workers. Only `/api/*` reaches it (`run_worker_first`). |
-| Database | Neon Postgres (free tier) through Cloudflare Hyperdrive, one asyncpg connection per request |
+| Database | Neon Postgres (free tier) through Cloudflare Hyperdrive, one asyncpg connection per request. Hyperdrive query caching is **off**, so reads never return values from before a write. |
 | Settings | Read from the Worker's `env`: `JWT_SECRET` is a Worker secret; other values are Wrangler vars |
 | Entry point | `cloudflare/src/entry.py` swaps the DB and settings dependencies. No business code changes. |
 

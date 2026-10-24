@@ -17,8 +17,10 @@ Dashboard labels change over time; if a name differs slightly, look for the clos
 
 1. Profile icon (top right) → **My Profile** → **API Tokens** → **Create Token**.
 2. Use the **Edit Cloudflare Workers** template.
-3. Account resources: your account. Zone resources: leave the template default.
-4. **Continue to summary** → **Create Token**, then copy the token. It is shown only once.
+3. Add one permission row: **Account → Hyperdrive → Edit**, so a deploy can attach the
+   Hyperdrive binding.
+4. Account resources: your account. Zone resources: leave the template default.
+5. **Continue to summary** → **Create Token**, then copy the token. It is shown only once.
 
 ## 3. Neon Postgres
 
@@ -30,9 +32,12 @@ Dashboard labels change over time; if a name differs slightly, look for the clos
 
 ## 4. Hyperdrive config
 
-1. Cloudflare dashboard → **Storage & Databases** → **Hyperdrive** → **Create configuration**.
+1. Cloudflare dashboard → **Storage & databases** → **Postgres & MySQL (Hyperdrive)** →
+   **Connect database**.
 2. Name it `dealerdesk-neon` and paste the Neon direct connection string.
-3. Create it and copy the configuration **ID**. The ID is not secret.
+3. **Turn caching off.** Hyperdrive caches read queries for up to 60 seconds by default. That
+   would let a page reload or a conflict message show values from before a save.
+4. Create it and copy the configuration **ID**. The ID is not secret.
 
 ## 5. GitHub secrets and variables
 

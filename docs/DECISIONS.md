@@ -138,7 +138,9 @@ snapshots the module at deploy time, before any secret exists.
 The job's stack is Postgres, and the concurrency fix relies on Postgres row locking.
 Cloudflare's own database, D1, is SQLite and would have meant re-validating the atomic update.
 Hyperdrive keeps pooled connections close to Neon, so a connection per request is cheap.
-It is included in the free plan.
+It is included in the free plan. Its query cache is turned off: a cached read could show
+values from before a save, which would undermine both "persists on reload" and the conflict
+panel's "current values".
 
 **Password hashing via WebCrypto with fewer iterations.**
 The free plan allows 10 ms of CPU per request. PBKDF2 compiled to WebAssembly is far too slow,
