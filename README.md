@@ -336,6 +336,8 @@ One Cloudflare Worker serves everything on its free `workers.dev` URL:
 
 ### Configuration
 
+One-time account and secret setup, step by step: [docs/DEPLOY_SETUP.md](docs/DEPLOY_SETUP.md).
+
 Values live in GitHub, never in the repository:
 
 | Name | Kind | Value |
