@@ -47,6 +47,8 @@ class Smoke:
         data = None if body is None else json.dumps(body).encode()
         req = urllib.request.Request(f"{self.base}{path}", data=data, method=method)
         req.add_header("Accept", "application/json")
+        # Cloudflare blocks Python's default "Python-urllib" user agent (error 1010).
+        req.add_header("User-Agent", "dealerdesk-smoke-test/1.0")
         if body is not None:
             req.add_header("Content-Type", "application/json")
         if token:
