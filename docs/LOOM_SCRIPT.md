@@ -4,6 +4,8 @@ Target length about 10 minutes, in this order: diagrams, then the UI flow with C
 live logs, then the Postgres data, then the code, then QA. Talking points are prompts in your
 own words, not lines to read.
 
+A 30-minute extended version is in [LOOM_SCRIPT_30MIN.md](LOOM_SCRIPT_30MIN.md).
+
 Live app: https://dealerdesk.aneeq02025.workers.dev · password for every demo account
 `Dealer#2026`.
 
@@ -11,7 +13,8 @@ Live app: https://dealerdesk.aneeq02025.workers.dev · password for every demo a
 
 ## Before you record (5 minutes)
 
-1. **Reset the demo data** so every vehicle starts at version 1. In GitHub, open **Actions**,
+1. **Reset the demo data** so the vehicles start at version 1. The Ford F-150 (N-1003)
+   will show version 3: the pipeline's smoke test edits and restores it after every deploy. In GitHub, open **Actions**,
    then **CI/CD**, then **Run workflow**. Choose branch `main`, keep **deploy** ticked, and
    tick **reset_demo_data**. Wait for the green run of about 6 minutes.
 2. **Open these tabs, left to right:**
@@ -95,7 +98,8 @@ the `cf` section.
 Run the queries from `docs/demo_queries.sql` in the SQL Editor (tab 5).
 
 1. **Query 1, inventory.** The Camry is at **version 3, updated by Bob Chen**: Alice took it
-   from 1 to 2, Bob from 2 to 3. Every other row is still version 1. The rejected 409 changed
+   from 1 to 2, Bob from 2 to 3. The other rows are at version 1, except the Ford F-150 that
+   the deploy's smoke test touched. The rejected 409 changed
    nothing.
 2. **Query 3, sessions.** There are rows for Alice, Bob and Victor. Bob's has `revoked`
    filled in from the logout, so his token is now dead on the server.
