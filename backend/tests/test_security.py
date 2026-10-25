@@ -5,6 +5,8 @@ same bytes as the standard; scripts/check_webcrypto_parity.mjs checks the WebCry
 against the same vector under Pyodide.
 """
 
+import asyncpg
+
 from app.core.security import (
     burn_password_check,
     hash_password,
@@ -40,3 +42,12 @@ async def test_malformed_hash_is_rejected_not_raised() -> None:
 
 async def test_burn_check_runs() -> None:
     await burn_password_check("anything", 1000)
+
+
+async def test_seeded_users_have_individually_salted_hashes(db: asyncpg.Connection) -> None:
+    # All demo accounts share one password; their stored hashes must still all differ.
+    hashes = [r["password_hash"] for r in await db.fetch("SELECT password_hash FROM users")]
+    assert len(hashes) == 6
+    assert len(set(hashes)) == 6
+    salts = {h.split("$")[2] for h in hashes}
+    assert len(salts) == 6

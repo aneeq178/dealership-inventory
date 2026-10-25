@@ -11,7 +11,6 @@ It does NOT touch the schema; use scripts.reset for a full rebuild.
 
 import argparse
 import asyncio
-from functools import lru_cache
 from uuid import UUID
 
 import asyncpg
@@ -153,23 +152,22 @@ VEHICLES = [
 ]
 
 
-@lru_cache
-def _password_hash(iterations: int) -> str:
-    # Hashing is deliberately slow; compute once per process and reuse for all seed users.
-    # Each user still gets a properly salted hash in production because the salt is random
-    # per call — here all seed users intentionally share one synthetic password and hash.
-    return hash_password(SEED_PASSWORD, iterations)
+def _password_hashes(iterations: int) -> list[str]:
+    # One hash per user, each with its own random salt: identical passwords must not produce
+    # identical stored hashes. The cost is small at the iteration counts used in tests (1,000)
+    # and on Cloudflare (10,000); locally at 600,000 it is about two seconds per seed.
+    return [hash_password(SEED_PASSWORD, iterations) for _ in USERS]
 
 
 async def seed(conn: asyncpg.Connection) -> None:
-    pw_hash = _password_hash(get_settings().password_hash_iterations)
+    hashes = _password_hashes(get_settings().password_hash_iterations)
     async with conn.transaction():
         await conn.execute("TRUNCATE sessions, vehicles, users, dealerships CASCADE")
         await conn.executemany("INSERT INTO dealerships (id, name) VALUES ($1, $2)", DEALERSHIPS)
         await conn.executemany(
             """INSERT INTO users (id, dealership_id, email, name, role, password_hash)
                VALUES ($1, $2, $3, $4, $5, $6)""",
-            [(*u, pw_hash) for u in USERS],
+            [(*u, h) for u, h in zip(USERS, hashes, strict=True)],
         )
         await conn.executemany(
             """INSERT INTO vehicles (id, dealership_id, stock_number, make, model, year, status)
