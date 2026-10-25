@@ -18,7 +18,7 @@ Live app: https://dealerdesk.aneeq02025.workers.dev · password for every demo a
 
    | # | Tab | Where |
    |---|---|---|
-   | 1 | Diagrams | GitHub → `docs/ARCHITECTURE.md`, or the PNGs in `docs/diagrams/` |
+   | 1 | Diagrams | `docs/DealerDesk-System-Design.pdf`, or the PNGs in `docs/diagrams/` |
    | 2 | App as Alice | https://dealerdesk.aneeq02025.workers.dev |
    | 3 | App as Bob | Same URL in a second tab; sign-ins are per tab |
    | 4 | Cloudflare logs | Workers & Pages → **dealerdesk** → **Observability** → **Live** |
@@ -35,28 +35,31 @@ Live app: https://dealerdesk.aneeq02025.workers.dev · password for every demo a
 
 ## 1 · Architecture diagrams (about 1:30)
 
-**Show 01, the system overview.**
+**Open the PDF on the "How to read this document" page.** Say in one line: high-level design
+is the parts and how they connect; low-level design is how each part works inside.
+
+**Show Figure 3, deployment architecture.**
 - One Cloudflare Worker serves both halves on one origin: Next.js static files, and FastAPI
   for `/api/*` only.
 - Postgres is Neon. Hyperdrive sits between them and keeps pooled connections, with
   caching off so reads are never stale.
 - GitHub Actions is the only path to production.
 
-**Show 02, the delivery pipeline.**
+**Show Figure 6, the CI/CD pipeline** (landscape page). Follow the lettered connectors.
 - Four checks run on every PR. Deploy runs only on `main` and only after all of them pass.
 - The deploy steps are ordered so cheap checks (config, token) fail before anything changes
   (migration).
 
-**Show 07, two admins at once.** This is the heart of it.
+**Show Figure 11, two admins at once.** This is the heart of it.
 - Both send version 1. The version check is part of the UPDATE, so Postgres serialises them
   on the row lock. The second matches zero rows and gets 409.
 
-**Show 09, the data model, briefly.**
+**Show Figure 14, the data model, briefly.**
 - Users and vehicles each belong to exactly one dealership. Sessions make logout real.
   `version` is the optimistic lock.
 
-> Diagrams 04 (backend layers), 05 (auth sequence) and 06 (authorization decisions) are there
-> if you are asked to go deeper.
+> For deeper questions: Figure 7 (backend layers), Figure 8 (login), Figure 9 (token and
+> session validation), Figure 10 (vehicle update) and Figure 13 (edit page).
 
 ---
 
@@ -194,9 +197,9 @@ show the green run with every job passing and smoke 15/15.
 | Assessment item (section 9) | Where in this script |
 |---|---|
 | 1. Login, scoped list, admin update, logout on the deployed app | Section 2 |
-| 2. Frontend, backend, storage, hosting structure | Section 1, diagrams 01–04 |
+| 2. Frontend, backend, storage, hosting structure | Section 1, Figures 2, 3, 7 |
 | 3. Auth validation, expiry and invalidation | Section 4 `deps.py`, section 3 query 3 |
 | 4. Viewer and cross-dealership rejection via direct API | Section 5d, `smoke.py` |
 | 5. Stale-edit conflict, atomic logic, regression test, defective vs fixed | Sections 2, 4, 5a–5b |
-| 6. Checks, gating, deployment, secrets, health, recovery | Sections 1 (02), 4 (`ci.yml`), 5e, 6 |
+| 6. Checks, gating, deployment, secrets, health, recovery | Sections 1 (Figure 6), 4 (`ci.yml`), 5e, 6 |
 | 7. Tradeoffs, gaps, unfinished work, next improvement | Section 6 |
