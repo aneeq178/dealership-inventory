@@ -38,17 +38,17 @@ Live app: https://dealerdesk.aneeq02025.workers.dev · password for every demo a
 
 ## 1 · Architecture diagrams (about 1:30)
 
-**Open the PDF on the "How to read this document" page.** Say in one line: high-level design
+**Open the PDF at Part 1.** Say in one line: high-level design
 is the parts and how they connect; low-level design is how each part works inside.
 
-**Show Figure 3, deployment architecture.**
+**Show Figure 2, deployment architecture.**
 - One Cloudflare Worker serves both halves on one origin: Next.js static files, and FastAPI
   for `/api/*` only.
 - Postgres is Neon. Hyperdrive sits between them and keeps pooled connections, with
   caching off so reads are never stale.
 - GitHub Actions is the only path to production.
 
-**Show Figure 6, the CI/CD pipeline** (landscape page). Follow the lettered connectors.
+**Show Figure 5, the CI/CD pipeline** (landscape page). Follow the lettered connectors.
 - Four checks run on every PR. Deploy runs only on `main` and only after all of them pass.
 - The deploy steps are ordered so cheap checks (config, token) fail before anything changes
   (migration).
@@ -57,7 +57,7 @@ is the parts and how they connect; low-level design is how each part works insid
 - Both send version 1. The version check is part of the UPDATE, so Postgres serialises them
   on the row lock. The second matches zero rows and gets 409.
 
-**Show Figure 14, the data model, briefly.**
+**Show Figure 6, the data model, briefly.** It opens Part 2, the low-level design.
 - Users and vehicles each belong to exactly one dealership. Sessions make logout real.
   `version` is the optimistic lock.
 
@@ -201,9 +201,9 @@ show the green run with every job passing and smoke 15/15.
 | Assessment item (section 9) | Where in this script |
 |---|---|
 | 1. Login, scoped list, admin update, logout on the deployed app | Section 2 |
-| 2. Frontend, backend, storage, hosting structure | Section 1, Figures 2, 3, 7 |
+| 2. Frontend, backend, storage, hosting structure | Section 1, Figures 1, 2, 6, 7 |
 | 3. Auth validation, expiry and invalidation | Section 4 `deps.py`, section 3 query 3 |
 | 4. Viewer and cross-dealership rejection via direct API | Section 5d, `smoke.py` |
 | 5. Stale-edit conflict, atomic logic, regression test, defective vs fixed | Sections 2, 4, 5a–5b |
-| 6. Checks, gating, deployment, secrets, health, recovery | Sections 1 (Figure 6), 4 (`ci.yml`), 5e, 6 |
+| 6. Checks, gating, deployment, secrets, health, recovery | Sections 1 (Figure 5), 4 (`ci.yml`), 5e, 6 |
 | 7. Tradeoffs, gaps, unfinished work, next improvement | Section 6 |

@@ -6,86 +6,8 @@ Live: https://dealerdesk.aneeq02025.workers.dev · Repository: https://github.co
 
 This document is the source of the PDF `docs/DealerDesk-System-Design.pdf`, which is built
 by `docs/tools/build_design_pdf.cjs`. PNG copies of every figure, for slides and video, are
-in [docs/diagrams/](diagrams/).
-
----
-
-## How to read this document
-
-### What high-level design means
-
-**High-level design (HLD)** describes the system from the outside. It answers:
-
-- **What are the major parts?** For example: a web frontend, an API, a database, a delivery pipeline.
-- **Where does each part run?** For example: Cloudflare, Neon, GitHub.
-- **How do the parts talk to each other?** Which protocols, and in which direction.
-- **Who uses the system, and for what?**
-
-HLD deliberately leaves out function names, SQL and field types. Its audience is anyone who
-needs the big picture: reviewers, stakeholders, a new team member on day one.
-
-### What low-level design means
-
-**Low-level design (LLD)** opens each box from the HLD and describes how it works inside. It
-answers:
-
-- **How is the code organised?** Modules, layers, and their responsibilities.
-- **Exactly what happens, step by step,** when a request arrives: every check, every
-  decision, every database call.
-- **What are the data structures?** Tables, columns, constraints, API contracts and error codes.
-- **How are the hard cases handled?** Invalid tokens, wrong roles, other dealerships'
-  data, two people saving at once.
-
-Its audience is the engineers who build, review and maintain the code.
-
-| | High-level design | Low-level design |
-|---|---|---|
-| Question | What are the parts and how do they connect? | How does each part work inside? |
-| Detail | Systems, services, hosting, data flow | Modules, functions, SQL, fields, error codes |
-| Typical diagrams | Context, deployment, user journey, pipeline | Flowcharts of logic, sequence diagrams, ERD, API tables |
-| Changes when | The architecture changes | The code changes |
-| In this document | Part 1, figures 1–6 | Part 2, figures 7–15 |
-
-### Flowchart symbols
-
-Flowcharts use the standard symbols (ISO 5807 / ANSI style), colour-coded for readability.
-
-#### Figure 1 · Flowchart symbol legend
-
-```mermaid
-flowchart LR
-    t(["Terminator<br/>start or end"]):::term
-    p["Process<br/>one step of work"]
-    d{"Decision<br/>yes / no"}:::dec
-    io[/"Input / output<br/>data in or out"/]:::io
-    sub[["Predefined process<br/>a named function"]]:::sub
-    db[("Data store<br/>database table")]:::db
-    c(("Actor")):::actor
-    con(("A")):::con
-    x(["Error terminator<br/>request rejected"]):::bad
-    t ~~~ p ~~~ d ~~~ io
-    sub ~~~ db ~~~ c ~~~ con ~~~ x
-
-    classDef term fill:#dcfce7,stroke:#15803d,color:#14532d
-    classDef bad fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
-    classDef dec fill:#fef3c7,stroke:#b45309,color:#78350f
-    classDef io fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e
-    classDef db fill:#f1f5f9,stroke:#334155,color:#0f172a
-    classDef sub fill:#ede9fe,stroke:#6d28d9,color:#3b0764
-    classDef actor fill:#fff7ed,stroke:#c2410c,color:#7c2d12
-    classDef con fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
-```
-
-| Symbol | Shape | Meaning |
-|---|---|---|
-| Terminator | Rounded oval | Where a flow starts or ends. Red ovals end a flow with an error response. |
-| Process | Rectangle | One step of work |
-| Decision | Diamond | A yes/no question; each exit is labelled |
-| Input / output | Parallelogram | Data entering or leaving: user input, an HTTP response |
-| Predefined process | Rectangle with double sides | A named function described elsewhere |
-| Data store | Cylinder | A database read or write |
-| Actor | Circle with a name | A person or external system |
-| On-page connector | Circle with a letter | The flow continues at the circle with the same letter. Long flowcharts are split into numbered columns this way. |
+in [docs/diagrams/](diagrams/). Part 1 is the high-level design, Part 2 the low-level design;
+the appendix explains the two terms and the flowchart symbols.
 
 ---
 
@@ -95,7 +17,7 @@ flowchart LR
 
 Who uses DealerDesk, and which outside systems it depends on.
 
-#### Figure 2 · System context
+#### Figure 1 · System context
 
 ```mermaid
 flowchart LR
@@ -128,7 +50,7 @@ dealership's vehicles.
 
 Where each part runs in production, and what flows between them.
 
-#### Figure 3 · Deployment architecture
+#### Figure 2 · Deployment architecture
 
 ```mermaid
 flowchart TB
@@ -178,7 +100,7 @@ flowchart TB
 
 Every request reaches Cloudflare first. Only API calls run Python.
 
-#### Figure 4 · Request routing
+#### Figure 3 · Request routing
 
 ```mermaid
 flowchart TB
@@ -206,7 +128,7 @@ flowchart TB
 
 The business flow from the user's point of view.
 
-#### Figure 5 · User journey
+#### Figure 4 · User journey
 
 ```mermaid
 flowchart TB
@@ -249,7 +171,7 @@ flowchart TB
 From a code change to a verified release. Each failure stops the run before anything
 further changes.
 
-#### Figure 6 · CI/CD pipeline
+#### Figure 5 · CI/CD pipeline
 
 ```mermaid
 flowchart LR
@@ -333,9 +255,66 @@ needs a schema rollback while migrations stay additive.
 
 ## Part 2 · Low-level design
 
-### 2.1 Backend module structure
+### 2.1 Data model
 
-The FastAPI application is layered. Each layer depends only on the layers below it.
+The backend design starts with the data. Every layer above is built around these four
+tables, and two of the core rules live in the schema itself: each user and vehicle belongs
+to exactly one dealership, and each vehicle carries the `version` used to detect stale edits.
+
+#### Figure 6 · Entity relationship diagram
+
+```mermaid
+erDiagram
+    DEALERSHIPS ||--o{ USERS : employs
+    DEALERSHIPS ||--o{ VEHICLES : owns
+    USERS ||--o{ SESSIONS : "logs in"
+    USERS |o--o{ VEHICLES : "last updated"
+
+    DEALERSHIPS {
+        uuid id PK
+        text name UK
+        timestamptz created_at
+    }
+    USERS {
+        uuid id PK
+        uuid dealership_id FK
+        text email UK "case-insensitive"
+        text name
+        text role "admin or viewer"
+        text password_hash
+    }
+    SESSIONS {
+        uuid id PK
+        uuid user_id FK
+        timestamptz created_at
+        timestamptz expires_at
+        timestamptz revoked_at "set on logout"
+    }
+    VEHICLES {
+        uuid id PK
+        uuid dealership_id FK
+        text stock_number
+        text make
+        text model
+        int year
+        text status
+        int version "optimistic lock"
+        timestamptz updated_at
+        uuid updated_by FK
+    }
+```
+
+| Table | Key constraints |
+|---|---|
+| `dealerships` | `name` unique |
+| `users` | `dealership_id` NOT NULL FK (exactly one dealership); unique `lower(email)`; `role` in (`admin`, `viewer`) |
+| `sessions` | FK to user, cascades on delete; `revoked_at` null until logout |
+| `vehicles` | `dealership_id` NOT NULL FK; `year` 1900–2100; `status` in (`available`, `reserved`, `sold`); make and model 1–50 chars; `version` ≥ 1; `(dealership_id, stock_number)` unique; index on `dealership_id` |
+| `schema_migrations` | One row per applied migration file |
+
+### 2.2 Backend module structure
+
+On top of that schema, the FastAPI application is layered. Each layer depends only on the layers below it.
 
 #### Figure 7 · Backend layers
 
@@ -393,7 +372,7 @@ On Cloudflare, `cloudflare/src/entry.py` builds this same app and overrides thre
 dependencies: `get_conn` and `db_ping` use the Hyperdrive binding, and `get_settings` reads
 the Worker's `env`.
 
-### 2.2 Login
+### 2.3 Login
 
 `POST /api/auth/login` in `services/auth.py`.
 
@@ -448,7 +427,7 @@ flowchart LR
 per user. On Cloudflare the check runs through the runtime's native WebCrypto; locally it uses
 `hashlib`. Both produce identical bytes, which is tested against the RFC 7914 vector.
 
-### 2.3 Authenticating every protected request
+### 2.4 Authenticating every protected request
 
 `current_user` in `api/deps.py` runs before every protected endpoint.
 
@@ -524,7 +503,7 @@ next column. **Expiry is enforced twice:** by the JWT `exp` claim and by `sessio
 **Logout** sets `sessions.revoked_at`, so the same token is refused immediately, even though
 its JWT has not expired.
 
-### 2.4 Updating a vehicle
+### 2.5 Updating a vehicle
 
 `PUT /api/vehicles/{id}`, admin only. This is the core correctness path.
 
@@ -577,7 +556,7 @@ checking and writing are one statement with no gap between them. The defective v
 commit `309eed5`, read the version first, compared it in Python, then wrote unconditionally.
 Two requests could both pass the comparison and both write.
 
-### 2.5 Two administrators saving at once
+### 2.6 Two administrators saving at once
 
 #### Figure 11 · Concurrent update sequence
 
@@ -619,7 +598,7 @@ Verified three ways:
 | CI | [Red run](https://github.com/aneeq178/dealership-inventory/actions/runs/40089597027) on `de5c4fc`, [green run](https://github.com/aneeq178/dealership-inventory/actions/runs/40089805129) on `6dc1a40` |
 | `scripts/live_race.py` against production | 5/5 rounds of truly simultaneous saves, each with exactly one 200 and one 409 |
 
-### 2.6 Request lifecycle across the stack
+### 2.7 Request lifecycle across the stack
 
 #### Figure 12 · Login, authenticated call and logout across the stack
 
@@ -651,7 +630,7 @@ sequenceDiagram
     Note over Br,PG: same token now gets 401 token_revoked
 ```
 
-### 2.7 Frontend: the edit page
+### 2.8 Frontend: the edit page
 
 `frontend/app/vehicles/edit/page.tsx`, with all API errors mapped centrally in `lib/api.ts`.
 A 401 at any point signs the user out and returns them to the login page with the reason.
@@ -709,59 +688,6 @@ flowchart LR
     classDef con fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
 ```
 
-### 2.8 Data model
-
-#### Figure 14 · Entity relationship diagram
-
-```mermaid
-erDiagram
-    DEALERSHIPS ||--o{ USERS : employs
-    DEALERSHIPS ||--o{ VEHICLES : owns
-    USERS ||--o{ SESSIONS : "logs in"
-    USERS |o--o{ VEHICLES : "last updated"
-
-    DEALERSHIPS {
-        uuid id PK
-        text name UK
-        timestamptz created_at
-    }
-    USERS {
-        uuid id PK
-        uuid dealership_id FK
-        text email UK "case-insensitive"
-        text name
-        text role "admin or viewer"
-        text password_hash
-    }
-    SESSIONS {
-        uuid id PK
-        uuid user_id FK
-        timestamptz created_at
-        timestamptz expires_at
-        timestamptz revoked_at "set on logout"
-    }
-    VEHICLES {
-        uuid id PK
-        uuid dealership_id FK
-        text stock_number
-        text make
-        text model
-        int year
-        text status
-        int version "optimistic lock"
-        timestamptz updated_at
-        uuid updated_by FK
-    }
-```
-
-| Table | Key constraints |
-|---|---|
-| `dealerships` | `name` unique |
-| `users` | `dealership_id` NOT NULL FK (exactly one dealership); unique `lower(email)`; `role` in (`admin`, `viewer`) |
-| `sessions` | FK to user, cascades on delete; `revoked_at` null until logout |
-| `vehicles` | `dealership_id` NOT NULL FK; `year` 1900–2100; `status` in (`available`, `reserved`, `sold`); make and model 1–50 chars; `version` ≥ 1; `(dealership_id, stock_number)` unique; index on `dealership_id` |
-| `schema_migrations` | One row per applied migration file |
-
 ### 2.9 API contract
 
 | Method and path | Who | Success | Errors |
@@ -791,7 +717,7 @@ switches on `code`:
 
 ### 2.10 Cloudflare Worker internals
 
-#### Figure 15 · Worker request handling
+#### Figure 14 · Worker request handling
 
 ```mermaid
 flowchart TB
@@ -822,3 +748,82 @@ flowchart TB
 (`GET /api/auth/me`) to 130 ms (login), above the free plan's documented 10 ms. All 45
 measured requests were served. The floor is the Python-on-WebAssembly runtime, not the
 application logic.
+
+---
+
+## Appendix · How to read this document
+
+### What high-level design means
+
+**High-level design (HLD)** describes the system from the outside. It answers:
+
+- **What are the major parts?** For example: a web frontend, an API, a database, a delivery pipeline.
+- **Where does each part run?** For example: Cloudflare, Neon, GitHub.
+- **How do the parts talk to each other?** Which protocols, and in which direction.
+- **Who uses the system, and for what?**
+
+HLD deliberately leaves out function names, SQL and field types. Its audience is anyone who
+needs the big picture: reviewers, stakeholders, a new team member on day one.
+
+### What low-level design means
+
+**Low-level design (LLD)** opens each box from the HLD and describes how it works inside. It
+answers:
+
+- **How is the code organised?** Modules, layers, and their responsibilities.
+- **Exactly what happens, step by step,** when a request arrives: every check, every
+  decision, every database call.
+- **What are the data structures?** Tables, columns, constraints, API contracts and error codes.
+- **How are the hard cases handled?** Invalid tokens, wrong roles, other dealerships'
+  data, two people saving at once.
+
+Its audience is the engineers who build, review and maintain the code.
+
+| | High-level design | Low-level design |
+|---|---|---|
+| Question | What are the parts and how do they connect? | How does each part work inside? |
+| Detail | Systems, services, hosting, data flow | Modules, functions, SQL, fields, error codes |
+| Typical diagrams | Context, deployment, user journey, pipeline | Flowcharts of logic, sequence diagrams, ERD, API tables |
+| Changes when | The architecture changes | The code changes |
+| In this document | Part 1, figures 1–5 | Part 2, figures 6–14 |
+
+### Flowchart symbols
+
+Flowcharts use the standard symbols (ISO 5807 / ANSI style), colour-coded for readability.
+
+#### Figure A · Flowchart symbol legend
+
+```mermaid
+flowchart LR
+    t(["Terminator<br/>start or end"]):::term
+    p["Process<br/>one step of work"]
+    d{"Decision<br/>yes / no"}:::dec
+    io[/"Input / output<br/>data in or out"/]:::io
+    sub[["Predefined process<br/>a named function"]]:::sub
+    db[("Data store<br/>database table")]:::db
+    c(("Actor")):::actor
+    con(("A")):::con
+    x(["Error terminator<br/>request rejected"]):::bad
+    t ~~~ p ~~~ d ~~~ io
+    sub ~~~ db ~~~ c ~~~ con ~~~ x
+
+    classDef term fill:#dcfce7,stroke:#15803d,color:#14532d
+    classDef bad fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+    classDef dec fill:#fef3c7,stroke:#b45309,color:#78350f
+    classDef io fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e
+    classDef db fill:#f1f5f9,stroke:#334155,color:#0f172a
+    classDef sub fill:#ede9fe,stroke:#6d28d9,color:#3b0764
+    classDef actor fill:#fff7ed,stroke:#c2410c,color:#7c2d12
+    classDef con fill:#ffffff,stroke:#334155,color:#0f172a,stroke-width:2px
+```
+
+| Symbol | Shape | Meaning |
+|---|---|---|
+| Terminator | Rounded oval | Where a flow starts or ends. Red ovals end a flow with an error response. |
+| Process | Rectangle | One step of work |
+| Decision | Diamond | A yes/no question; each exit is labelled |
+| Input / output | Parallelogram | Data entering or leaving: user input, an HTTP response |
+| Predefined process | Rectangle with double sides | A named function described elsewhere |
+| Data store | Cylinder | A database read or write |
+| Actor | Circle with a name | A person or external system |
+| On-page connector | Circle with a letter | The flow continues at the circle with the same letter. Long flowcharts are split into numbered columns this way. |
