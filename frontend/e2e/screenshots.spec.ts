@@ -17,7 +17,7 @@ test.use({ viewport: { width: 1360, height: 860 } });
 
 test("capture screens", async ({ page, browser }) => {
   await page.goto("/login/");
-  await page.getByRole("button", { name: /Alice Morgan/ }).click();
+  await page.getByLabel("Email").fill(ACCOUNTS.alice.email);
   await page.screenshot(shot("01-login"));
 
   await signIn(page, ACCOUNTS.alice.email);

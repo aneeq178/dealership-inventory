@@ -67,16 +67,16 @@ action below makes a request appear in the log.
 
 | Do in the app | Appears in the live log |
 |---|---|
-| Sign in as **Alice Morgan**, using the demo-account button | `POST /api/auth/login` |
+| Sign in as `alice.admin@northside.test` | `POST /api/auth/login` |
 | Inventory loads: 4 Northside vehicles, no Southgate stock | `GET /api/vehicles` |
 | Open **2022 Toyota Camry**: version 1 | `GET /api/vehicles/{id}` |
-| In tab 3 sign in as **Bob Chen** and open the same Camry | `POST /api/auth/login`, `GET …/{id}` |
+| In tab 3 sign in as `bob.admin@northside.test` and open the same Camry | `POST /api/auth/login`, `GET …/{id}` |
 | Alice changes the model, then **Save changes**: "version 2" | `PUT /api/vehicles/{id}` → 200 |
 | Bob changes the status, then **Save changes** | `PUT /api/vehicles/{id}` → **409** |
 | Point at Bob's conflict panel: who saved, the diff, Save disabled | |
 | Bob clicks **Refresh to latest version**, re-applies, saves: "version 3" | `GET …/{id}`, then `PUT` → 200 |
 | Reload Alice's page: both changes persisted | `GET …/{id}` |
-| Sign out Bob, then sign in as **Victor Reyes**: read-only notice, **View** links only | `POST …/logout` → 204, login |
+| Sign out Bob, then sign in as `victor.viewer@northside.test`: read-only notice, **View** links only | `POST …/logout` → 204, login |
 
 **Click one `PUT` event in the log** and point at `"status"` and `"cpuTimeMs"`. Scroll past
 the `cf` section.

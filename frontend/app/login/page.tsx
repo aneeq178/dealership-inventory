@@ -5,7 +5,6 @@ import {
   Eye,
   EyeOff,
   GitCompare,
-  KeyRound,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -13,10 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Logo } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
-import { Alert, Button, Field, FullPageSpinner, Input, RoleBadge } from "@/components/ui";
+import { Alert, Button, Field, FullPageSpinner, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api";
-import { DEMO_ACCOUNTS, DEMO_PASSWORD, SHOW_DEMO_ACCOUNTS } from "@/lib/demo-accounts";
-import { cn } from "@/lib/format";
 
 const REASON_MESSAGES: Record<string, { tone: "info" | "warning"; text: string }> = {
   token_expired: { tone: "warning", text: "Your session expired. Please sign in again." },
@@ -71,12 +68,6 @@ function LoginForm() {
       }
       setSubmitting(false);
     }
-  }
-
-  function fillDemo(demoEmail: string) {
-    setEmail(demoEmail);
-    setPassword(DEMO_PASSWORD);
-    setError(null);
   }
 
   return (
@@ -188,53 +179,6 @@ function LoginForm() {
             </Button>
           </form>
 
-          {SHOW_DEMO_ACCOUNTS && (
-            <section className="mt-10" aria-labelledby="demo-heading">
-              <div className="flex items-center gap-3">
-                <span className="h-px flex-1 bg-slate-200" />
-                <h2
-                  id="demo-heading"
-                  className="text-xs font-medium uppercase tracking-wider text-slate-500"
-                >
-                  Demo accounts
-                </h2>
-                <span className="h-px flex-1 bg-slate-200" />
-              </div>
-              <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-slate-500">
-                <KeyRound className="size-3.5" aria-hidden />
-                Click to fill · password for all accounts:
-                <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">
-                  {DEMO_PASSWORD}
-                </code>
-              </p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                {DEMO_ACCOUNTS.map((group) => (
-                  <div key={group.dealership}>
-                    <p className="mb-2 text-xs font-semibold text-slate-700">{group.dealership}</p>
-                    <ul className="space-y-1.5">
-                      {group.users.map((u) => (
-                        <li key={u.email}>
-                          <button
-                            type="button"
-                            onClick={() => fillDemo(u.email)}
-                            className={cn(
-                              "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm ring-1 ring-inset transition-colors",
-                              email === u.email
-                                ? "bg-brand-50 ring-brand-300"
-                                : "bg-white ring-slate-200 hover:bg-slate-50",
-                            )}
-                          >
-                            <span className="truncate font-medium text-slate-800">{u.name}</span>
-                            <RoleBadge role={u.role} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
         </div>
       </main>
     </div>
