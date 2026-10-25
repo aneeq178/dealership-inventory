@@ -96,8 +96,11 @@ frontend/
 docs/                 plan, decisions, work log, screenshots
 ```
 
-High-level and low-level diagrams (system, pipeline, routing, layers, auth, authorization,
-concurrency, frontend errors, data model) are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+The system design document explains high-level versus low-level design and contains 15
+figures, with flowcharts using standard symbols. Read it as
+[docs/DealerDesk-System-Design.pdf](docs/DealerDesk-System-Design.pdf), or as
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) on GitHub. Rebuild the PDF and the PNGs with
+`node docs/tools/build_design_pdf.cjs` and `node docs/tools/render_diagrams.cjs`.
 Design decisions and tradeoffs are in [docs/DECISIONS.md](docs/DECISIONS.md). The video
 walkthrough plan is [docs/LOOM_SCRIPT.md](docs/LOOM_SCRIPT.md).
 
