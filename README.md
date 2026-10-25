@@ -96,7 +96,10 @@ frontend/
 docs/                 plan, decisions, work log, screenshots
 ```
 
-Design decisions and tradeoffs are in [docs/DECISIONS.md](docs/DECISIONS.md).
+High-level and low-level diagrams (system, pipeline, routing, layers, auth, authorization,
+concurrency, frontend errors, data model) are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Design decisions and tradeoffs are in [docs/DECISIONS.md](docs/DECISIONS.md). The video
+walkthrough plan is [docs/LOOM_SCRIPT.md](docs/LOOM_SCRIPT.md).
 
 ---
 
@@ -156,7 +159,7 @@ Deployment configuration is listed under [Deployment](#deployment-cloudflare).
 
 | Command | What runs |
 |---|---|
-| `cd backend && .venv/Scripts/python -m pytest -v` | 54 tests: API, hashing, and the Worker entry wiring, against a real Postgres test database |
+| `cd backend && .venv/Scripts/python -m pytest -v` | 55 tests: API, hashing, seed, and the Worker entry wiring, against a real Postgres test database |
 | `cd cloudflare && npm ci && npm run test:webcrypto` | Runs the Worker's WebCrypto password hashing under Pyodide and checks it against the RFC vector and Node's PBKDF2 |
 | `cd backend && .venv/Scripts/ruff check . && .venv/Scripts/mypy` | Lint and type check |
 | `cd frontend && npm run lint && npm run typecheck && npm run build` | Lint, type check, static build |
@@ -187,7 +190,7 @@ development data. Each test reseeds, so tests are independent and repeatable.
 ### Latest local results
 
 ```
-backend   pytest      54 passed
+backend   pytest      55 passed
 worker    pyodide     WebCrypto PBKDF2 matches RFC 7914 and node:crypto
 backend   ruff, mypy  clean
 frontend  eslint, tsc, next build  clean
@@ -384,9 +387,24 @@ database accepted exactly one each time. It restores the vehicle afterwards.
 python backend/scripts/live_race.py https://dealerdesk.aneeq02025.workers.dev
 ```
 
-**CPU budget in practice.** Across roughly 75 live API requests, including 9 logins at
-10,000 PBKDF2 iterations, none hit Cloudflare's CPU limit error (1102). The dashboard's
-exact per-request CPU figure was not captured.
+**CPU budget, measured.** Cloudflare's observability events record `cpuTimeMs` per request.
+For 45 consecutive production requests, all successful with 0 errors:
+
+| Route | Requests | Median CPU | Max CPU |
+|---|---|---|---|
+| `POST /api/auth/login` | 10 | 130 ms | 327 ms |
+| `POST /api/auth/logout` | 4 | 119 ms | 128 ms |
+| `GET /api/vehicles/{id}` | 12 | 63 ms | 169 ms |
+| `GET /api/vehicles` | 5 | 57 ms | 176 ms |
+| `GET /api/health` | 2 | 56 ms | 56 ms |
+| `PUT /api/vehicles/{id}` | 11 | 42 ms | 130 ms |
+| `GET /api/auth/me` | 1 | 25 ms | 25 ms |
+
+Every route exceeds the free plan's documented 10 ms. The floor is the Python-on-WebAssembly
+runtime itself, not the password hashing: even `/api/auth/me` costs 25 ms. Cloudflare
+served every request, so the limit is evidently not enforced strictly per request today, but
+under sustained load the plan could start rejecting requests (error 1102). The robust fix is
+Workers Paid ($5 a month, up to 30 s CPU).
 
 ### First deployment: what failed and how the gates handled it
 
@@ -427,8 +445,9 @@ either step fails the run.
 - **Weaker password hashing on Cloudflare.** The free plan's 10 ms CPU budget forces far fewer
   PBKDF2 iterations than the 600,000 used locally. Each hash still has a random salt, and the
   stored iteration count lets it be raised on a paid plan.
-- **Exact Worker CPU per request not captured.** No CPU-limit errors were seen in about 75
-  live requests, but the per-request figure was not read from Cloudflare's dashboard.
+- **Over the free plan's documented CPU limit.** Measured median CPU is 25 to 130 ms per
+  request against a documented 10 ms. Nothing has failed, but heavy traffic could be
+  rejected on the free plan.
 - **No live rollback rehearsal.** Release recovery is documented but untested.
 - **Token in `sessionStorage`.** Readable by JavaScript, so an XSS bug could steal it. An
   httpOnly cookie would avoid that but needs CSRF protection. With static files and a strict
