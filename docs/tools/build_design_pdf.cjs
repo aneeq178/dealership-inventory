@@ -17,8 +17,9 @@ const previewArg = process.argv.indexOf("--preview");
 const PREVIEW = previewArg > 0 ? process.argv[previewArg + 1] : null;
 
 const md = fs.readFileSync(path.join(ROOT, "docs", "ARCHITECTURE.md"), "utf8");
-// The cover page replaces the Markdown title block.
-const body = md.slice(md.indexOf("## How to read this document"));
+// The PDF is Part 1 and Part 2 only: the cover replaces the Markdown title block, and the
+// appendix (what HLD/LLD mean, the symbol legend) stays in the Markdown on GitHub.
+const body = md.slice(md.indexOf("## Part 1"), md.indexOf("## Appendix"));
 
 const CSS = `
   @page { size: A4; margin: 16mm 15mm 18mm 15mm; }
@@ -81,8 +82,8 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>${CSS}</st
     <div class="parts">
       <div class="part"><b>Part 1 · High-level design</b>System context, deployment on Cloudflare
         and Neon, edge routing, the user journey, and the CI/CD pipeline.</div>
-      <div class="part"><b>Part 2 · Low-level design</b>Backend layers, login, token validation,
-        the atomic vehicle update, concurrency, the frontend edit flow, the data model and the API contract.</div>
+      <div class="part"><b>Part 2 · Low-level design</b>The data model, backend layers, login, token
+        validation, the atomic vehicle update, concurrency, the frontend edit flow and the API contract.</div>
     </div>
     <dl>
       <dt>Live application</dt><dd>https://dealerdesk.aneeq02025.workers.dev</dd>

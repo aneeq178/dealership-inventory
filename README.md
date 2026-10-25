@@ -96,8 +96,8 @@ frontend/
 docs/                 plan, decisions, work log, screenshots
 ```
 
-The system design document explains high-level versus low-level design and contains 15
-figures, with flowcharts using standard symbols. Read it as
+The system design document covers the high-level design (Part 1) and the low-level design
+(Part 2, starting with the data model) in 14 figures, with flowcharts using standard symbols. Read it as
 [docs/DealerDesk-System-Design.pdf](docs/DealerDesk-System-Design.pdf), or as
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) on GitHub. Rebuild the PDF and the PNGs with
 `node docs/tools/build_design_pdf.cjs` and `node docs/tools/render_diagrams.cjs`.

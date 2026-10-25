@@ -75,13 +75,15 @@ Scroll the assessment PDF and summarise:
 
 ## 2 · High-level vs low-level design (1:00) · tab 2
 
-Open the PDF at **How to read this document**.
+Open the PDF on its **Contents** page, which shows Part 1 and Part 2.
 
-- *"High-level design is the outside view: the major parts, where they run, how they connect."*
-- *"Low-level design opens each part: modules, every check on a request, the tables, the error codes."*
-- Show **Figure 1**, the legend: *"Standard flowchart symbols: ovals start and end, diamonds
-  are decisions, parallelograms are input and output, cylinders are the database, and
-  lettered circles are connectors where a long flow continues in the next column."*
+- *"Part 1 is the high-level design: the outside view, the major parts, where they run, how
+  they connect."*
+- *"Part 2 is the low-level design: it opens each part, starting with the data model, then
+  the modules, every check on a request, and the error codes."*
+- *"The flowcharts use standard symbols: ovals start and end, diamonds are decisions,
+  parallelograms are input and output, cylinders are the database, and lettered circles
+  continue the flow in the next column."*
 
 ---
 
@@ -89,11 +91,11 @@ Open the PDF at **How to read this document**.
 
 | Figure | Talking points |
 |---|---|
-| **2 · System context** | Admins and viewers use the app; developers push to GitHub; GitHub deploys to Cloudflare; data lives in Neon. |
-| **3 · Deployment** | *"One Cloudflare address serves both halves. The Next.js frontend is plain static files. The FastAPI backend is a Python Worker that only runs for /api. It reaches Postgres through Hyperdrive, which keeps pooled connections near Neon, with caching off so reads are never stale."* |
-| **4 · Routing** | *"Pages never run code, so they cost no CPU. Only API calls run Python."* |
-| **5 · User journey** | Login, inventory, then admin vs viewer, then save or conflict. *"The conflict loops back to editing; it never overwrites."* |
-| **6 · CI/CD pipeline** (landscape) | Follow the connectors A to D. *"Checks on every PR. Deploy only from main, only when all four checks pass. Configuration and token are checked before the first step that changes anything."* |
+| **1 · System context** | Admins and viewers use the app; developers push to GitHub; GitHub deploys to Cloudflare; data lives in Neon. |
+| **2 · Deployment** | *"One Cloudflare address serves both halves. The Next.js frontend is plain static files. The FastAPI backend is a Python Worker that only runs for /api. It reaches Postgres through Hyperdrive, which keeps pooled connections near Neon, with caching off so reads are never stale."* |
+| **3 · Routing** | *"Pages never run code, so they cost no CPU. Only API calls run Python."* |
+| **4 · User journey** | Login, inventory, then admin vs viewer, then save or conflict. *"The conflict loops back to editing; it never overwrites."* |
+| **5 · CI/CD pipeline** (landscape) | Follow the connectors A to D. *"Checks on every PR. Deploy only from main, only when all four checks pass. Configuration and token are checked before the first step that changes anything."* |
 
 ---
 
@@ -101,12 +103,12 @@ Open the PDF at **How to read this document**.
 
 | Figure | Talking points |
 |---|---|
+| **6 · Data model** | Start here: *"Four tables. Users and vehicles each require exactly one dealership, so isolation is built into the schema. Sessions make logout real. The version column is the optimistic lock."* Show the constraints table under the figure. |
 | **7 · Backend layers** | *"Routes parse input, deps.py enforces security, services decide outcomes, repositories hold every SQL statement, core holds shared tools. The Cloudflare entry file swaps only how connections and settings are obtained."* |
 | **8 · Login** | *"Unknown email and wrong password give the same error and take the same time, so attackers can't discover accounts. A login creates a session row; the token carries its id."* |
 | **9 · Token validation** (landscape) | Walk the three columns: token, session, role. *"Each failure has its own 401 code. Logout works because the session row is checked on every request, not just the token."* |
 | **10 · Vehicle update** | *"One UPDATE with the version in the WHERE clause. One row: success. Zero rows: we look again inside your dealership. If it exists you get 409; if not, 404, the same answer as a missing id, so you can't probe other dealerships."* |
 | **11 · Concurrency** | *"Both admins send version 1. Postgres serialises the two UPDATEs on the row lock; the second re-checks its WHERE against the committed row, sees version 2, and matches nothing."* |
-| **14 · Data model** | Four tables. *"Users and vehicles each require exactly one dealership. The version column is the optimistic lock."* |
 | **API and error tables** | One error envelope; the frontend switches on the code. |
 
 ---
