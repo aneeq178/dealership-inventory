@@ -43,8 +43,8 @@ Honest summary of what is done and verified versus still open.
 
 ## Reviewer accounts
 
-All accounts are synthetic. One shared password: **`Dealer#2026`**. The login page also lists
-them; click one to fill the form.
+All accounts are synthetic. One shared password: **`Dealer#2026`**. They are listed only here,
+not on the login page.
 
 | Dealership | Name | Email | Role |
 |---|---|---|---|
@@ -140,7 +140,6 @@ Names only; no real secrets are committed. See `backend/.env.example` and `front
 | `STATIC_DIR` | backend | Optional: serve `frontend/out` from the API (E2E tests) |
 | `TEST_DATABASE_URL` | tests | Test database, default `.../dealership_test` |
 | `NEXT_PUBLIC_API_BASE_URL` | frontend | API origin; empty in production (same origin) |
-| `NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS` | frontend | Show demo accounts on the login page |
 
 Deployment configuration is listed under [Deployment](#deployment-cloudflare).
 
