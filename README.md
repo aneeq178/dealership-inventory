@@ -13,7 +13,7 @@ Cloudflare Workers (free plan).
 | Repository | https://github.com/aneeq178/dealership-inventory |
 | Deployed app | **https://dealerdesk.aneeq02025.workers.dev** |
 | Green deploy run | [CI/CD run 40104512958](https://github.com/aneeq178/dealership-inventory/actions/runs/40104512958): checks, deploy, health, smoke 15/15 |
-| Loom walkthrough | _To be recorded._ |
+| Loom walkthrough | https://www.loom.com/share/cc4315217abd409ebc54214c4ba526f1 |
 | Lost-update demo, red run | [CI run 40089597027](https://github.com/aneeq178/dealership-inventory/actions/runs/40089597027) on `de5c4fc` |
 | Lost-update demo, green run | [CI run 40089805129](https://github.com/aneeq178/dealership-inventory/actions/runs/40089805129) on `6dc1a40` |
 
