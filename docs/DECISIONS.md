@@ -145,9 +145,10 @@ panel's "current values".
 **Password hashing via WebCrypto with fewer iterations.**
 The free plan allows 10 ms of CPU per request. PBKDF2 compiled to WebAssembly is far too slow,
 so the Worker calls the runtime's native WebCrypto PBKDF2. Even native, 600,000 iterations
-costs about 370 ms. The deployed default is 10,000, about 6 ms. This is the main security
-tradeoff of the free-plan requirement. It is configurable without code changes and
-documented as a limitation.
+costs about 370 ms. The deployed default is 10,000, about 6 ms. Measured in production
+later, the Python runtime alone costs 25 ms or more per request, so hashing was never what
+kept requests under 10 ms. The count can reasonably go back up; it is configurable without
+code changes.
 
 **Deploy packaging copies `backend/app` into `cloudflare/src/app`.**
 Cloudflare uploads every `.py` file under the entry module's folder, including virtualenvs.
